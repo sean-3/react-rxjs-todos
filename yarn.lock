@@ -1358,11 +1358,6 @@
     "@types/yargs" "^15.0.0"
     chalk "^3.0.0"
 
-"@josepot/rxjs-utils@^0.15.2":
-  version "0.15.2"
-  resolved "https://registry.yarnpkg.com/@josepot/rxjs-utils/-/rxjs-utils-0.15.2.tgz#c889c1787a48ff36fcbf31cdb13ee1beaec577a9"
-  integrity sha512-IBADdo6Jaupj2202gDvMxS73IUNgXGFQ+iek3fbCBff3U91257glZQdQWje+UMtZgnUVH57Wc2o0sfPvW6hJXg==
-
 "@mrmlnc/readdir-enhanced@^2.2.1":
   version "2.2.1"
   resolved "https://registry.yarnpkg.com/@mrmlnc/readdir-enhanced/-/readdir-enhanced-2.2.1.tgz#524af240d1a360527b730475ecfa1344aa540dde"
@@ -1375,6 +1370,16 @@
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/@nodelib/fs.stat/-/fs.stat-1.1.3.tgz#2b5a3ab3f918cca48a8c754c08168e3f03eba61b"
   integrity sha512-shAmDyaQC4H92APFoIaVDHCx5bStIocgvbwQyxPRrbUY20V1EYTbSDchWbuwlMG3V17cprZhA6+78JfB+3DTPw==
+
+"@react-rxjs/core@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@react-rxjs/core/-/core-0.1.1.tgz#56ead2a28f65bc4ec97f17e0025f7fde10d6aaf5"
+  integrity sha512-/5ZPr41/+4M1UelRRWu4ElgesJUNkkdOkTjh1dDuWYezU75cL2hA9km7oSYxBjLT+9NUU1Jxbomy5KaqKEkEYA==
+
+"@react-rxjs/utils@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@react-rxjs/utils/-/utils-0.1.1.tgz#51e23a912e9f822dd0b17d587f724f92ca3fdecf"
+  integrity sha512-SCrs6YSGi1JcMA/4Cb108IKilG0XIHqwGde+7PnwDZfDNgpMr5NtL9zAjmfK70/RNzszSRx4g8L2Msoh8f7IEA==
 
 "@svgr/babel-plugin-add-jsx-attribute@^4.2.0":
   version "4.2.0"
@@ -8749,11 +8754,6 @@ react-is@^16.12.0, react-is@^16.8.1, react-is@^16.8.4:
   version "16.13.1"
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-16.13.1.tgz#789729a4dc36de2999dc156dd6c1d9c18cea56a4"
   integrity sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==
-
-react-rxjs@^3.0.0-alpha.2:
-  version "3.0.0-alpha.5"
-  resolved "https://registry.yarnpkg.com/react-rxjs/-/react-rxjs-3.0.0-alpha.5.tgz#8bf499ac41fa2dcc1ab0f67695784a4ac5ca976c"
-  integrity sha512-t0FP3IP1NuwdY8EAhbGzDNe/e8mJXqQR2gIQ0pbcd7GClND2LoR4No6r+zpLcN60vZOsa2gYXNGZd23QklakYQ==
 
 react-scripts@3.4.1:
   version "3.4.1"

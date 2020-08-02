@@ -1,155 +1,156 @@
-import { Subject, concat, combineLatest, Observable, merge } from "rxjs";
+import {Subject, combineLatest, Observable, merge, of, MonoTypeOperatorFunction} from "rxjs";
 import {
-  scan,
   startWith,
   withLatestFrom,
   map,
   take,
-  takeUntil,
   distinctUntilChanged,
   filter,
   pluck,
+  share,
+  mergeMap,
+  tap,
+  takeWhile,
 } from "rxjs/operators";
-import { groupInMap, mergeWithKey } from "@josepot/rxjs-utils";
+import {groupInMap} from "@react-rxjs/utils";
 import {
-  connectFactoryObservable,
-  subjectFactory,
+  bind,
   shareLatest,
-  connectObservable,
-} from "react-rxjs";
+} from "@react-rxjs/core";
 
-interface Todo {
-  id: number;
-  text: string;
-  done: boolean;
+const userAdd$ = new Subject<string>();
+export const onNewTodo = (text: string) => userAdd$.next(text);
+
+const userEdit$ = new Subject<{id: number, text: string}>()
+export const onEditTodo = (id: number) => (text: string) => {
+  userEdit$.next({id, text})
 }
 
-const newTodo$ = new Subject<string>();
-export const onNewTodo = (text: string) => newTodo$.next(text);
+const userDelete$ = new Subject<number>();
+export const onDeleteTodo = (id: number) => () => userDelete$.next(id);
+
+const additions$: Observable<{id: number, text: string}> = userAdd$.pipe(
+  map((text, id) => ({id, text})),
+  share()
+)
+
+const id$ = additions$.pipe(pluck('id'), share());
+
+const _completed$ = new Subject<number[]>()
+const _uncompleted$ = new Subject<number[]>()
+
+const clearCompleted$ = new Subject();
+export const onClearCompleted = () => clearCompleted$.next();
+
+const deletions$: Observable<number> = merge(
+  userDelete$,
+  userEdit$.pipe(filter(({text}) => text.length === 0), pluck('id')),
+  clearCompleted$.pipe(
+    withLatestFrom(_completed$),
+    pluck(1),
+    mergeMap(completed => completed)
+  ),
+).pipe(share())
+
+const allIds$: Observable<number[]> = merge(id$, deletions$).pipe(
+  groupInMap(id => id, id$ => id$.pipe(take(2))),
+  map(x => [...x.keys()]),
+  startWith([]),
+  shareLatest()
+)
+
+const userToggle$ = new Subject<number>();
+export const onToggleTodo = (id: number) => () => userToggle$.next(id);
 
 const toggleAll$ = new Subject();
 export const onToggleAll = () => toggleAll$.next();
 
-const clearCompleted$ = new Subject();
-export const onClearCompleted = () => clearCompleted$.next();
+const toggle$: Observable<number> = merge(
+  userToggle$,
+  toggleAll$.pipe(
+    withLatestFrom(_uncompleted$, allIds$),
+    mergeMap(([_, uncompleted, allIds]) => uncompleted.length === 0 ? allIds : uncompleted)
+  ),
+).pipe(share())
+
+const reducePrev = <A, C>(
+  prev$: Observable<A>,
+  reducer: (acc: A, current: C) => A
+) => (source$: Observable<C>): Observable<A> => source$.pipe(
+  withLatestFrom(prev$),
+  map(([current, acc]) => reducer(acc, current))
+)
+
+const uncompleted$ = merge(
+  id$.pipe(reducePrev(_uncompleted$, (acc, id) => [...acc, id])),
+  toggle$.pipe(reducePrev(_uncompleted$, (acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id])),
+  deletions$.pipe(reducePrev(_uncompleted$, (acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : acc)),
+  of([])
+).pipe(
+  distinctUntilChanged(),
+  tap(_uncompleted$) as MonoTypeOperatorFunction<number[]>,
+  shareLatest()
+)
+
+const completed$ = merge(
+  toggle$.pipe(reducePrev(_completed$, (acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id])),
+  deletions$.pipe(reducePrev(_completed$, (acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : acc)),
+  of([])
+).pipe(
+  distinctUntilChanged(),
+  tap(_completed$) as MonoTypeOperatorFunction<number[]>,
+  shareLatest()
+)
+
+export const todos$ = merge(
+  additions$,
+  userEdit$.pipe(filter(todo => todo.text.length > 0)),
+  deletions$.pipe(map(id => ({id, text: ''})))
+).pipe(
+  groupInMap(
+    todo => todo.id,
+    todo$ => todo$.pipe(takeWhile(todo => todo.text.length > 0))
+  ),
+  shareLatest()
+)
 
 const filterChanged$ = new Subject<"all" | "done" | "undone">();
 export const onFilterChange = (type: "all" | "done" | "undone") =>
   filterChanged$.next(type);
 
-export const [useCurrentFilter, currentFilter$] = connectObservable(
+export const [useCurrentFilter, currentFilter$] = bind(
   filterChanged$.pipe(startWith("all" as const))
 );
 
-const textEdit$ = subjectFactory<number, string>();
-export const onEditTodo = (id: number) => (text: string) =>
-  textEdit$(id).next(text);
+export const [useTodo] = bind((id: number) => combineLatest(
+  todos$.pipe(map(todos => todos.get(id)!)),
+  completed$.pipe(map(completed => completed.includes(id)), distinctUntilChanged())
+).pipe(
+  map(([todo, done]) => ({...todo, done}))
+))
 
-const toggle$ = subjectFactory<number, void>();
-export const onToggleTodo = (id: number) => () => toggle$(id).next();
-
-const delete$ = subjectFactory<number, void>();
-export const onDeleteTodo = (id: number) => () => delete$(id).next();
-
-const inc = (prev: number) => prev + 1;
-const newId$ = newTodo$.pipe(
-  filter((text) => text.length > 0),
-  scan(inc, 0)
-);
-
-const todosMap$: Observable<Map<number, Todo>> = newId$.pipe(
-  withLatestFrom(newTodo$),
-  groupInMap(
-    ([id]) => id,
-    (newTodoWithId$) => {
-      const id = newTodoWithId$.key;
-
-      const initialText$ = newTodoWithId$.pipe(
-        map(([, initialText]) => initialText),
-        take(1)
-      );
-      const text$ = concat(
-        initialText$,
-        textEdit$(id).pipe(filter((text) => text.length > 0))
-      );
-
-      const done$ = mergeWithKey({ toggle: toggle$(id), set: setDone$ }).pipe(
-        scan(
-          (done, action) => (action.type === "set" ? action.payload : !done),
-          false
-        ),
-        startWith(false),
-        shareLatest()
-      );
-
-      const cleared$ = clearCompleted$.pipe(
-        withLatestFrom(done$),
-        filter(([, done]) => done)
-      );
-      const emptyTextUpdate$ = textEdit$(id).pipe(
-        filter((text) => text.length === 0)
-      );
-
-      return combineLatest(text$, done$)
-        .pipe(map(([text, done]) => ({ id, text, done })))
-        .pipe(takeUntil(merge(delete$(id), cleared$, emptyTextUpdate$)));
-    }
-  ),
-  startWith(new Map()),
-  shareLatest()
-);
-
-export const [useTodo] = connectFactoryObservable((id: number) =>
-  todosMap$.pipe(map((todos) => todos.get(id)!))
-);
-
-const todosList$ = todosMap$.pipe(
-  map((todos) => [...todos.values()]),
-  shareLatest()
-);
-
-const collectIds = (isMatch: (todo: Todo) => boolean = () => true) => (
-  source$: Observable<Todo[]>
-) =>
-  source$.pipe(
-    map((todos) => todos.filter(isMatch)),
-    distinctUntilChanged((a, b) => a.length === b.length),
-    map((todos) => todos.map((todo) => todo.id))
-  );
-
-const allIds$ = todosList$.pipe(collectIds());
-export const [useIsListEmpty] = connectObservable(
+export const [useIsListEmpty] = bind(
   allIds$.pipe(map((ids) => ids.length === 0))
 );
 
-const completedIds$ = todosList$.pipe(collectIds(({ done }) => done));
-const uncompletedIds$ = todosList$.pipe(collectIds(({ done }) => !done));
-
-const setDone$ = toggleAll$.pipe(
-  withLatestFrom(uncompletedIds$.pipe(map((x) => x.length > 0))),
-  pluck(1),
-  shareLatest()
-);
-
-export const [useAreAllDone] = connectObservable(
-  combineLatest(allIds$, completedIds$).pipe(
+export const [useAreAllDone] = bind(
+  combineLatest(allIds$, completed$).pipe(
     map(([all, completed]) => all.length === completed.length)
   )
 );
 
-export const [useActiveCount] = connectObservable(
-  uncompletedIds$.pipe(pluck("length"))
+export const [useActiveCount] = bind(
+  uncompleted$.pipe(pluck("length"))
 );
 
-export const [useUnActiveCount] = connectObservable(
-  completedIds$.pipe(pluck("length"))
+export const [useUnActiveCount] = bind(
+  completed$.pipe(pluck("length"))
 );
 
-const ids$ = combineLatest(allIds$, completedIds$, uncompletedIds$).pipe(
-  map(([all, done, undone]) => ({ all, done, undone })),
-  shareLatest()
+const ids$ = combineLatest(allIds$, completed$, uncompleted$).pipe(
+  map(([all, done, undone]) => ({all, done, undone})),
 );
 
-export const [useIds] = connectObservable(
+export const [useIds] = bind(
   combineLatest(ids$, currentFilter$).pipe(map(([ids, filter]) => ids[filter]))
 );
