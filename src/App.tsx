@@ -1,5 +1,5 @@
-import React, {useState, useEffect} from "react";
-import classnames from "classnames";
+import React, { useState, useEffect } from "react"
+import classnames from "classnames"
 import {
   onNewTodo,
   useIsListEmpty,
@@ -10,23 +10,23 @@ import {
   useUnActiveCount,
   onClearCompleted,
   useIds,
-  useTodo,
+  useTodoText,
+  useIsTodoCompleted,
   onEditTodo,
   onToggleTodo,
   onDeleteTodo,
   onToggleAll,
-  todos$,
-} from "./todos";
-import {Subscribe} from "@react-rxjs/utils";
+  useTodos,
+} from "./todos"
 
 const TodoTextInput: React.FC<{
-  onSave: (value: string) => void;
-  editing?: boolean;
-  initialText?: string;
-  newTodo?: boolean;
-  placeholder?: string;
-}> = ({onSave, initialText, editing, newTodo, placeholder}) => {
-  const [text, setText] = useState(initialText ?? "");
+  onSave: (value: string) => void
+  editing?: boolean
+  initialText?: string
+  newTodo?: boolean
+  placeholder?: string
+}> = ({ onSave, initialText, editing, newTodo, placeholder }) => {
+  const [text, setText] = useState(initialText ?? "")
 
   return (
     <input
@@ -40,21 +40,21 @@ const TodoTextInput: React.FC<{
       value={text}
       onBlur={(e) => {
         if (!newTodo) {
-          onSave(e.target.value);
+          onSave(e.target.value)
         }
       }}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {
         if (e.which === 13) {
-          onSave(text.trim());
+          onSave(text.trim())
           if (newTodo) {
-            setText("");
+            setText("")
           }
         }
       }}
     />
-  );
-};
+  )
+}
 
 const Header: React.FC = () => (
   <header className="header">
@@ -65,10 +65,10 @@ const Header: React.FC = () => (
       placeholder="What needs to be done"
     />
   </header>
-);
+)
 
 const ToggleAll: React.FC = () => {
-  const areAllDone = useAreAllDone();
+  const areAllDone = useAreAllDone()
   return (
     <span>
       <input
@@ -79,19 +79,19 @@ const ToggleAll: React.FC = () => {
       />
       <label onClick={onToggleAll} />
     </span>
-  );
-};
+  )
+}
 
 const FILTER_TITLES: Record<"all" | "done" | "undone", string> = {
   all: "All",
   undone: "Active",
   done: "Completed",
-};
+}
 
 const Footer: React.FC = () => {
-  const activeCount = useActiveCount();
-  const itemWord = activeCount === 1 ? "item" : "items";
-  const currentFilter = useCurrentFilter();
+  const activeCount = useActiveCount()
+  const itemWord = activeCount === 1 ? "item" : "items"
+  const currentFilter = useCurrentFilter()
   return (
     <footer className="footer">
       <span className="todo-count">
@@ -101,8 +101,8 @@ const Footer: React.FC = () => {
         {Object.entries(FILTER_TITLES).map(([filter, value]) => (
           <li key={filter}>
             <a
-              className={classnames({selected: currentFilter === filter})}
-              style={{cursor: "pointer"}}
+              className={classnames({ selected: currentFilter === filter })}
+              style={{ cursor: "pointer" }}
               onClick={() => onFilterChange(filter as any)}
             >
               {value}
@@ -116,16 +116,17 @@ const Footer: React.FC = () => {
         </button>
       )}
     </footer>
-  );
-};
+  )
+}
 
-const TodoItem: React.FC<{id: number}> = ({id}) => {
-  const [isEditing, setEditing] = useState(false);
-  const {text, done} = useTodo(id);
+const TodoItem: React.FC<{ id: number }> = ({ id }) => {
+  const [isEditing, setEditing] = useState(false)
+  const text = useTodoText(id)
+  const done = useIsTodoCompleted(id)
 
   useEffect(() => {
-    setEditing(false);
-  }, [text]);
+    setEditing(false)
+  }, [text])
 
   return (
     <li
@@ -137,20 +138,20 @@ const TodoItem: React.FC<{id: number}> = ({id}) => {
       {isEditing ? (
         <TodoTextInput initialText={text} editing onSave={onEditTodo(id)} />
       ) : (
-          <div className="view">
-            <input
-              className="toggle"
-              type="checkbox"
-              checked={done}
-              onChange={onToggleTodo(id)}
-            />
-            <label onDoubleClick={() => setEditing(true)}>{text}</label>
-            <button className="destroy" onClick={onDeleteTodo(id)} />
-          </div>
-        )}
+        <div className="view">
+          <input
+            className="toggle"
+            type="checkbox"
+            checked={done}
+            onChange={onToggleTodo(id)}
+          />
+          <label onDoubleClick={() => setEditing(true)}>{text}</label>
+          <button className="destroy" onClick={onDeleteTodo(id)} />
+        </div>
+      )}
     </li>
-  );
-};
+  )
+}
 
 const List: React.FC = () => (
   <ul className="todo-list">
@@ -158,29 +159,29 @@ const List: React.FC = () => (
       <TodoItem key={id} id={id} />
     ))}
   </ul>
-);
+)
 
-const MainSection: React.FC = ({children}) => {
-  const isListEmpty = useIsListEmpty();
+const MainSection: React.FC = ({ children }) => {
+  const isListEmpty = useIsListEmpty()
   return (
     <section className="main">
       {isListEmpty ? null : <ToggleAll />}
       {children}
       {isListEmpty ? null : <Footer />}
     </section>
-  );
-};
+  )
+}
 
 function App() {
+  useTodos()
   return (
     <div>
       <Header />
       <MainSection>
-        <Subscribe source$={todos$} />
         <List />
       </MainSection>
     </div>
-  );
+  )
 }
 
-export default App;
+export default App
