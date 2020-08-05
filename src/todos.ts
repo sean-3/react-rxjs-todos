@@ -36,9 +36,14 @@ export const onDeleteTodo = (id: number) => () => userDelete$.next(id)
 const clearCompleted$ = new Subject()
 export const onClearCompleted = () => clearCompleted$.next()
 
-const filterChanged$ = new Subject<"all" | "done" | "undone">()
-export const onFilterChange = (type: "all" | "done" | "undone") =>
-  filterChanged$.next(type)
+export enum Filters {
+  all = "all",
+  active = "active",
+  completed = "completed",
+}
+
+const filterChanged$ = new Subject<Filters>()
+export const onFilterChange = (type: Filters) => filterChanged$.next(type)
 
 const deletions$: Observable<number> = merge(
   userDelete$,
@@ -131,7 +136,7 @@ export const useTodos = () => {
 }
 
 export const [useCurrentFilter, currentFilter$] = bind(
-  filterChanged$.pipe(startWith("all" as const)),
+  filterChanged$.pipe(startWith(Filters.all)),
 )
 
 export const [useTodoText] = bind((id: number) =>
@@ -156,10 +161,10 @@ export const [useActiveCount] = bind(
 
 export const [useUnActiveCount] = bind(idsByDone$.pipe(pluck("done", "length")))
 
-const idsByFilter: Record<"all" | "done" | "undone", Observable<number[]>> = {
-  all: allIds$,
-  done: idsByDone$.pipe(pluck("done")),
-  undone: idsByDone$.pipe(pluck("pending")),
+const idsByFilter: Record<Filters, Observable<number[]>> = {
+  [Filters.all]: allIds$,
+  [Filters.completed]: idsByDone$.pipe(pluck("done")),
+  [Filters.active]: idsByDone$.pipe(pluck("pending")),
 }
 
 export const [useIds] = bind(
