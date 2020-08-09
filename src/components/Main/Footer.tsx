@@ -2,9 +2,9 @@ import React from "react"
 import classnames from "classnames"
 import {
   useActiveCount,
+  useUnActiveCount,
   useCurrentFilter,
   onFilterChange,
-  useUnActiveCount,
   onClearCompleted,
   Filters,
 } from "../../todos"
@@ -12,7 +12,7 @@ import {
 const FILTER_TITLES: Record<Filters, string> = {
   [Filters.all]: "All",
   [Filters.active]: "Active",
-  [Filters.completed]: "Completed",
+  [Filters.done]: "Completed",
 }
 
 export const Footer: React.FC = () => {
