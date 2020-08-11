@@ -8,6 +8,9 @@ import {
   shareReplay,
   map,
   distinctUntilChanged,
+  pairwise,
+  filter,
+  tap,
 } from "rxjs/operators"
 import { shareLatest } from "@react-rxjs/core"
 
@@ -63,33 +66,7 @@ const scanWithStartingValue = <I, O>(
     return source.pipe(scan(accumulator, seed), startWith(seed))
   })
 
-export const filterSplit = <K, T>(filter: (value: T) => boolean) => (
-  source$: Observable<GroupedObservable<K, T>>,
-): Observable<Set<K>> =>
-  source$.pipe(
-    mergeMap((inner$) =>
-      inner$.pipe(
-        map(filter),
-        distinctUntilChanged(),
-        map((value) => [inner$.key, value] as const),
-        endWith([inner$.key, false] as const),
-      ),
-    ),
-    scanWithStartingValue(
-      (acc, [key, present]) => {
-        if (present) {
-          acc.add(key)
-        } else {
-          acc.delete(key)
-        }
-        return acc
-      },
-      () => new Set<K>(),
-    ),
-    shareLatest(),
-  )
-
-export const collectSplit = <K, T>() => (
+export const collect = <K, T>() => (
   source$: Observable<GroupedObservable<K, T>>,
 ): Observable<Map<K, Observable<T>>> =>
   source$.pipe(
@@ -106,6 +83,37 @@ export const collectSplit = <K, T>() => (
         return acc
       },
       () => new Map<K, Observable<T>>(),
+    ),
+    shareLatest(),
+  )
+
+export const collectKeys = <K, T>(
+  mapper: (source$: Observable<T>, key: K) => Observable<boolean>,
+) => (source$: Observable<Map<K, Observable<T>>>): Observable<Set<K>> =>
+  source$.pipe(
+    map((m) => [...m.entries()]),
+    startWith([] as [K, Observable<T>][]),
+    pairwise(),
+    filter(([a, b]) => b.length > a.length),
+    map(([, b]) => b[b.length - 1]),
+    tap(([key]) => console.log("key", key)),
+    mergeMap(([key, inner$]) =>
+      mapper(inner$, key).pipe(
+        endWith(false),
+        distinctUntilChanged(),
+        map((value) => [key, value] as const),
+      ),
+    ),
+    scanWithStartingValue(
+      (acc, [key, present]) => {
+        if (present) {
+          acc.add(key)
+        } else {
+          acc.delete(key)
+        }
+        return acc
+      },
+      () => new Set<K>(),
     ),
     shareLatest(),
   )

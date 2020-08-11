@@ -1,10 +1,9 @@
-import { Subject, Observable, merge, defer, combineLatest, of } from "rxjs"
+import { Subject, Observable, merge, partition } from "rxjs"
 import {
   pluck,
   share,
   mergeMap,
   map,
-  filter,
   scan,
   startWith,
   switchMap,
@@ -12,10 +11,11 @@ import {
   takeWhile,
   take,
   tap,
+  mapTo,
 } from "rxjs/operators"
 import { useSubscribe, mergeWithKey } from "@react-rxjs/utils"
-import { bind, shareLatest } from "@react-rxjs/core"
-import { collectSplit, filterSplit, split } from "./groupInStreamMap"
+import { bind } from "@react-rxjs/core"
+import { collect, collectKeys, split } from "./groupInStreamMap"
 
 const userAdd$ = new Subject<string>()
 export const onNewTodo = (text: string) => userAdd$.next(text)
@@ -51,15 +51,14 @@ const newTodo$ = userAdd$.pipe(
   share(),
 )
 
+const [edit$, emptyEdit$] = partition(userEdit$, ({ text }) => text.length > 0)
+
 const _doneIds$ = new Subject<Set<number>>()
 const _activeIds$ = new Subject<Set<number>>()
 
 const deletions$: Observable<number> = merge(
   userDelete$,
-  userEdit$.pipe(
-    filter((edit) => edit.text.length === 0),
-    pluck("id"),
-  ),
+  emptyEdit$.pipe(pluck("id")),
   clearCompleted$.pipe(
     withLatestFrom(_doneIds$),
     mergeMap(([, done]) => done),
@@ -74,80 +73,73 @@ const toggles$: Observable<number> = merge(
   ),
 )
 
-const text$Map$ = merge(
-  userEdit$,
-  newTodo$,
-  deletions$.pipe(map((id) => ({ id, text: "" }))),
-).pipe(
-  split(
-    ({ id }) => id,
-    (text$) =>
-      text$.pipe(
-        pluck("text"),
-        takeWhile((text) => text.length > 0),
-      ),
-  ),
-  collectSplit(),
-)
-
-const done$$ = mergeWithKey({
-  toggle: merge(newTodo$.pipe(pluck("id")), toggles$),
-  delete: deletions$,
+const todos$ = mergeWithKey({
+  add: newTodo$,
+  edit: edit$,
+  toggle: toggles$.pipe(map((id) => ({ id }))),
+  delete: deletions$.pipe(map((id) => ({ id }))),
 }).pipe(
   split(
-    ({ payload }) => payload,
-    (toggle$) =>
-      toggle$.pipe(
-        takeWhile(({ type }) => type === "toggle"),
-        scan((acc) => !acc, true),
+    (x) => x.payload.id,
+    (events$, id) =>
+      events$.pipe(
+        takeWhile((event) => event.type !== "delete"),
+        scan(
+          (state, action) => {
+            switch (action.type) {
+              case "add":
+              case "edit":
+                return { ...state, text: action.payload.text }
+              case "toggle":
+                return { ...state, done: !state.done }
+              default:
+                return state
+            }
+          },
+          { id, text: "", done: false },
+        ),
       ),
   ),
   share(),
 )
 
-const done$Map$ = done$$.pipe(collectSplit())
+const todosMap$ = todos$.pipe(collect())
 
-const activeIds$: Observable<Set<number>> = done$$.pipe(
-  filterSplit((done) => !done),
+const allIds$: Observable<Set<number>> = todosMap$.pipe(
+  collectKeys((x) => x.pipe(mapTo(true))),
+)
+
+const activeIds$: Observable<Set<number>> = todosMap$.pipe(
+  collectKeys((todo$) =>
+    todo$.pipe(
+      pluck("done"),
+      map((done) => !done),
+    ),
+  ),
   tap(_activeIds$) as any,
 )
 
-const doneIds$: Observable<Set<number>> = done$$.pipe(
-  filterSplit((done) => done),
+const doneIds$: Observable<Set<number>> = todosMap$.pipe(
+  collectKeys(pluck("done")),
   tap(_doneIds$) as any,
 )
 
-const allIds$: Observable<number[]> = text$Map$.pipe(
-  map((entries) => [...entries.keys()]),
-  startWith([]),
-  shareLatest(),
-)
-
 export const useTodos = () => {
-  useSubscribe(merge(done$Map$, text$Map$, doneIds$, activeIds$))
+  useSubscribe(todosMap$)
 }
 
 export const [useCurrentFilter, currentFilter$] = bind(
   filterChanged$.pipe(startWith(Filters.all)),
 )
 
-export const [useTodoText] = bind((id: number) =>
-  text$Map$.pipe(
+export const [useTodo] = bind((id: number) =>
+  todosMap$.pipe(
     take(1),
     mergeMap((entries) => entries.get(id)!),
   ),
 )
 
-export const [useIsTodoCompleted] = bind((id: number) =>
-  done$Map$.pipe(
-    take(1),
-    mergeMap((entries) => entries.get(id)!),
-  ),
-)
-
-export const [useIsListEmpty] = bind(
-  allIds$.pipe(map((ids) => ids.length === 0)),
-)
+export const [useIsListEmpty] = bind(allIds$.pipe(map((ids) => ids.size === 0)))
 
 export const [useAreAllDone] = bind(
   activeIds$.pipe(map((active) => active.size === 0)),
@@ -157,12 +149,14 @@ export const [useActiveCount] = bind(activeIds$.pipe(pluck("size")))
 
 export const [useUnActiveCount] = bind(doneIds$.pipe(pluck("size")))
 
-const idsByFilter: Record<Filters, Observable<number[]>> = {
+const idsByFilter: Record<Filters, Observable<Set<number>>> = {
   [Filters.all]: allIds$,
-  [Filters.done]: doneIds$.pipe(map((ids) => [...ids])),
-  [Filters.active]: activeIds$.pipe(map((ids) => [...ids])),
+  [Filters.done]: doneIds$,
+  [Filters.active]: activeIds$,
 }
 
 export const [useIds] = bind(
-  currentFilter$.pipe(switchMap((type) => idsByFilter[type])),
+  currentFilter$.pipe(
+    switchMap((type) => idsByFilter[type].pipe(map((ids) => [...ids]))),
+  ),
 )

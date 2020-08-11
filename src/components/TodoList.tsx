@@ -2,8 +2,7 @@ import React, { useState, useEffect } from "react"
 import classnames from "classnames"
 import {
   useIds,
-  useTodoText,
-  useIsTodoCompleted,
+  useTodo,
   onEditTodo,
   onToggleTodo,
   onDeleteTodo,
@@ -12,8 +11,7 @@ import { TodoTextInput } from "./TodoTextInput"
 
 const TodoItem: React.FC<{ id: number }> = ({ id }) => {
   const [isEditing, setEditing] = useState(false)
-  const text = useTodoText(id)
-  const done = useIsTodoCompleted(id)
+  const { text, done } = useTodo(id)
 
   useEffect(() => {
     setEditing(false)
