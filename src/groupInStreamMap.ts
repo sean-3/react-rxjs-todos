@@ -1,11 +1,13 @@
-import { Observable, BehaviorSubject, GroupedObservable, Subject } from "rxjs"
+import { Observable, GroupedObservable, Subject, defer } from "rxjs"
 import {
-  finalize,
   scan,
   mergeMap,
   ignoreElements,
   startWith,
   endWith,
+  shareReplay,
+  map,
+  distinctUntilChanged,
 } from "rxjs/operators"
 import { shareLatest } from "@react-rxjs/core"
 
@@ -23,15 +25,20 @@ export const split = <K, T, R>(
           return groups.get(key)!.next(x)
         }
 
-        const subject = new BehaviorSubject<T>(x)
+        const subject = new Subject<T>()
         groups.set(key, subject)
 
         const res = streamSelector(subject, key).pipe(
-          finalize(() => groups.delete(key)),
-          shareLatest(),
+          shareReplay(1),
         ) as GroupedObservable<K, R>
         res.key = key
+        res.subscribe({
+          complete() {
+            groups.delete(key)
+          },
+        })
 
+        subject.next(x)
         subscriber.next(res)
       },
       (e) => {
@@ -47,19 +54,58 @@ export const split = <K, T, R>(
     )
   })
 
-export const groupInStreamMap = <K, T>() => (
+const scanWithStartingValue = <I, O>(
+  accumulator: (acc: O, current: I) => O,
+  getSeed: () => O,
+) => (source: Observable<I>) =>
+  defer(() => {
+    const seed = getSeed()
+    return source.pipe(scan(accumulator, seed), startWith(seed))
+  })
+
+export const filterSplit = <K, T>(filter: (value: T) => boolean) => (
+  source$: Observable<GroupedObservable<K, T>>,
+): Observable<Set<K>> =>
+  source$.pipe(
+    mergeMap((inner$) =>
+      inner$.pipe(
+        map(filter),
+        distinctUntilChanged(),
+        map((value) => [inner$.key, value] as const),
+        endWith([inner$.key, false] as const),
+      ),
+    ),
+    scanWithStartingValue(
+      (acc, [key, present]) => {
+        if (present) {
+          acc.add(key)
+        } else {
+          acc.delete(key)
+        }
+        return acc
+      },
+      () => new Set<K>(),
+    ),
+    shareLatest(),
+  )
+
+export const collectSplit = <K, T>() => (
   source$: Observable<GroupedObservable<K, T>>,
 ): Observable<Map<K, Observable<T>>> =>
   source$.pipe(
     mergeMap((inner$) =>
       inner$.pipe(ignoreElements(), startWith(inner$), endWith(inner$)),
     ),
-    scan((acc, current) => {
-      if (acc.has(current.key)) {
-        acc.delete(current.key)
-      } else {
-        acc.set(current.key, current)
-      }
-      return acc
-    }, new Map<K, Observable<T>>()),
+    scanWithStartingValue(
+      (acc, current) => {
+        if (acc.has(current.key)) {
+          acc.delete(current.key)
+        } else {
+          acc.set(current.key, current)
+        }
+        return acc
+      },
+      () => new Map<K, Observable<T>>(),
+    ),
+    shareLatest(),
   )

@@ -1,4 +1,4 @@
-import { Subject, Observable, merge, defer, combineLatest } from "rxjs"
+import { Subject, Observable, merge, defer, combineLatest, of } from "rxjs"
 import {
   pluck,
   share,
@@ -10,13 +10,12 @@ import {
   switchMap,
   withLatestFrom,
   takeWhile,
-  mapTo,
-  skip,
   take,
+  tap,
 } from "rxjs/operators"
 import { useSubscribe, mergeWithKey } from "@react-rxjs/utils"
 import { bind, shareLatest } from "@react-rxjs/core"
-import { groupInStreamMap, split } from "./groupInStreamMap"
+import { collectSplit, filterSplit, split } from "./groupInStreamMap"
 
 const userAdd$ = new Subject<string>()
 export const onNewTodo = (text: string) => userAdd$.next(text)
@@ -52,6 +51,9 @@ const newTodo$ = userAdd$.pipe(
   share(),
 )
 
+const _doneIds$ = new Subject<Set<number>>()
+const _activeIds$ = new Subject<Set<number>>()
+
 const deletions$: Observable<number> = merge(
   userDelete$,
   userEdit$.pipe(
@@ -59,7 +61,7 @@ const deletions$: Observable<number> = merge(
     pluck("id"),
   ),
   clearCompleted$.pipe(
-    withLatestFrom(defer(() => doneIds$)),
+    withLatestFrom(_doneIds$),
     mergeMap(([, done]) => done),
   ),
 ).pipe(share())
@@ -67,8 +69,8 @@ const deletions$: Observable<number> = merge(
 const toggles$: Observable<number> = merge(
   userToggle$,
   toggleAll$.pipe(
-    withLatestFrom(defer(() => combineLatest(doneIds$, activeIds$))),
-    mergeMap(([, [done, active]]) => (active.size > 0 ? active : done)),
+    withLatestFrom(_doneIds$, _activeIds$),
+    mergeMap(([, done, active]) => (active.size > 0 ? active : done)),
   ),
 )
 
@@ -85,8 +87,7 @@ const text$Map$ = merge(
         takeWhile((text) => text.length > 0),
       ),
   ),
-  groupInStreamMap(),
-  shareLatest(),
+  collectSplit(),
 )
 
 const done$$ = mergeWithKey({
@@ -104,46 +105,16 @@ const done$$ = mergeWithKey({
   share(),
 )
 
-const done$Map$ = done$$.pipe(groupInStreamMap(), shareLatest())
+const done$Map$ = done$$.pipe(collectSplit())
 
-const activeIds$: Observable<Set<number>> = mergeWithKey({
-  delete: deletions$.pipe(
-    withLatestFrom(defer(() => activeIds$)),
-    filter(([id, ids]) => ids.has(id)),
-    pluck(0),
-  ),
-  done: done$$.pipe(mergeMap((done$) => done$.pipe(mapTo(done$.key)))),
-}).pipe(
-  scan((acc, { type, payload }) => {
-    if (type === "delete" || acc.has(payload)) {
-      acc.delete(payload)
-    } else {
-      acc.add(payload)
-    }
-    return acc
-  }, new Set<number>()),
-  startWith(new Set<number>()),
-  shareLatest(),
+const activeIds$: Observable<Set<number>> = done$$.pipe(
+  filterSplit((done) => !done),
+  tap(_activeIds$) as any,
 )
 
-const doneIds$: Observable<Set<number>> = mergeWithKey({
-  delete: deletions$.pipe(
-    withLatestFrom(defer(() => doneIds$)),
-    filter(([id, ids]) => ids.has(id)),
-    pluck(0),
-  ),
-  done: done$$.pipe(mergeMap((done$) => done$.pipe(skip(1), mapTo(done$.key)))),
-}).pipe(
-  scan((acc, { type, payload }) => {
-    if (type === "delete" || acc.has(payload)) {
-      acc.delete(payload)
-    } else {
-      acc.add(payload)
-    }
-    return acc
-  }, new Set<number>()),
-  startWith(new Set<number>()),
-  shareLatest(),
+const doneIds$: Observable<Set<number>> = done$$.pipe(
+  filterSplit((done) => done),
+  tap(_doneIds$) as any,
 )
 
 const allIds$: Observable<number[]> = text$Map$.pipe(
