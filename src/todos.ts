@@ -1,7 +1,6 @@
 import { Subject, Observable, merge, partition } from "rxjs"
 import {
   pluck,
-  share,
   mergeMap,
   map,
   scan,
@@ -46,11 +45,6 @@ export enum Filters {
 const filterChanged$ = new Subject<Filters>()
 export const onFilterChange = (type: Filters) => filterChanged$.next(type)
 
-const newTodo$ = userAdd$.pipe(
-  map((text, id) => ({ id, text })),
-  share(),
-)
-
 const [edit$, emptyEdit$] = partition(userEdit$, ({ text }) => text.length > 0)
 
 const _doneIds$ = new Subject<Set<number>>()
@@ -63,7 +57,7 @@ const deletions$: Observable<number> = merge(
     withLatestFrom(_doneIds$),
     mergeMap(([, done]) => done),
   ),
-).pipe(share())
+)
 
 const toggles$: Observable<number> = merge(
   userToggle$,
@@ -74,7 +68,7 @@ const toggles$: Observable<number> = merge(
 )
 
 const todos$ = mergeWithKey({
-  add: newTodo$,
+  add: userAdd$.pipe(map((text, id) => ({ id, text }))),
   edit: edit$,
   toggle: toggles$.pipe(map((id) => ({ id }))),
   delete: deletions$.pipe(map((id) => ({ id }))),
@@ -100,32 +94,25 @@ const todos$ = mergeWithKey({
         ),
       ),
   ),
-  share(),
+  collect(),
 )
 
-const todosMap$ = todos$.pipe(collect())
-
-const allIds$: Observable<Set<number>> = todosMap$.pipe(
+const allIds$: Observable<Set<number>> = todos$.pipe(
   collectKeys((x) => x.pipe(mapTo(true))),
 )
 
-const activeIds$: Observable<Set<number>> = todosMap$.pipe(
-  collectKeys((todo$) =>
-    todo$.pipe(
-      pluck("done"),
-      map((done) => !done),
-    ),
-  ),
+const activeIds$: Observable<Set<number>> = todos$.pipe(
+  collectKeys(map(({ done }) => !done)),
   tap(_activeIds$) as any,
 )
 
-const doneIds$: Observable<Set<number>> = todosMap$.pipe(
+const doneIds$: Observable<Set<number>> = todos$.pipe(
   collectKeys(pluck("done")),
   tap(_doneIds$) as any,
 )
 
 export const useTodos = () => {
-  useSubscribe(todosMap$)
+  useSubscribe(todos$)
 }
 
 export const [useCurrentFilter, currentFilter$] = bind(
@@ -133,7 +120,7 @@ export const [useCurrentFilter, currentFilter$] = bind(
 )
 
 export const [useTodo] = bind((id: number) =>
-  todosMap$.pipe(
+  todos$.pipe(
     take(1),
     mergeMap((entries) => entries.get(id)!),
   ),

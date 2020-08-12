@@ -10,7 +10,6 @@ import {
   distinctUntilChanged,
   pairwise,
   filter,
-  tap,
 } from "rxjs/operators"
 import { shareLatest } from "@react-rxjs/core"
 
@@ -96,7 +95,6 @@ export const collectKeys = <K, T>(
     pairwise(),
     filter(([a, b]) => b.length > a.length),
     map(([, b]) => b[b.length - 1]),
-    tap(([key]) => console.log("key", key)),
     mergeMap(([key, inner$]) =>
       mapper(inner$, key).pipe(
         endWith(false),
