@@ -1,9 +1,10 @@
 import React from "react"
-import { useAreAllDone, onToggleAll } from "../../todos"
+import { useAreAllDone, onToggleAll, useIsListEmpty } from "../todos"
 
 export const ToggleAll: React.FC = () => {
+  const isListEmpty = useIsListEmpty()
   const areAllDone = useAreAllDone()
-  return (
+  return isListEmpty ? null : (
     <span>
       <input
         className="toggle-all"

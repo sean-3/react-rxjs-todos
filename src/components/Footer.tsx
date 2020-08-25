@@ -2,12 +2,13 @@ import React from "react"
 import classnames from "classnames"
 import {
   useActiveCount,
-  useUnActiveCount,
+  useAreAllActive,
   useCurrentFilter,
   onFilterChange,
   onClearCompleted,
   Filters,
-} from "../../todos"
+  useIsListEmpty,
+} from "../todos"
 
 const FILTER_TITLES: Record<Filters, string> = {
   [Filters.all]: "All",
@@ -17,12 +18,14 @@ const FILTER_TITLES: Record<Filters, string> = {
 
 export const Footer: React.FC = () => {
   const activeCount = useActiveCount()
-  const itemWord = activeCount === 1 ? "item" : "items"
   const currentFilter = useCurrentFilter()
-  return (
+  const areAllActive = useAreAllActive()
+  const isListEmpty = useIsListEmpty()
+  return isListEmpty ? null : (
     <footer className="footer">
       <span className="todo-count">
-        <strong>{activeCount || "No"}</strong> {itemWord} left
+        <strong>{activeCount || "No"}</strong>{" "}
+        {activeCount === 1 ? "item" : "items"} left
       </span>
       <ul className="filters">
         {Object.entries(FILTER_TITLES).map(([filter, value]) => (
@@ -37,7 +40,7 @@ export const Footer: React.FC = () => {
           </li>
         ))}
       </ul>
-      {useUnActiveCount() === 0 ? null : (
+      {areAllActive ? null : (
         <button className="clear-completed" onClick={onClearCompleted}>
           Clear completed
         </button>

@@ -21,6 +21,7 @@ export const TodoTextInput: React.FC<{
       autoFocus={true}
       value={text}
       onBlur={(e) => {
+        console.log("blur")
         if (!newTodo) {
           onSave(e.target.value)
         }

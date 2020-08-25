@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { memo, useState } from "react"
 import classnames from "classnames"
 import {
   useIds,
@@ -9,13 +9,9 @@ import {
 } from "../todos"
 import { TodoTextInput } from "./TodoTextInput"
 
-const TodoItem: React.FC<{ id: number }> = ({ id }) => {
-  const [isEditing, setEditing] = useState(false)
+const TodoItem: React.FC<{ id: number }> = memo(({ id }) => {
   const { text, done } = useTodo(id)
-
-  useEffect(() => {
-    setEditing(false)
-  }, [text])
+  const [isEditing, setEditing] = useState(false)
 
   return (
     <li
@@ -25,7 +21,14 @@ const TodoItem: React.FC<{ id: number }> = ({ id }) => {
       })}
     >
       {isEditing ? (
-        <TodoTextInput initialText={text} editing onSave={onEditTodo(id)} />
+        <TodoTextInput
+          initialText={text}
+          editing
+          onSave={(text) => {
+            setEditing(false)
+            onEditTodo(id, text)
+          }}
+        />
       ) : (
         <div className="view">
           <input
@@ -40,7 +43,7 @@ const TodoItem: React.FC<{ id: number }> = ({ id }) => {
       )}
     </li>
   )
-}
+})
 
 export const TodoList: React.FC = () => (
   <ul className="todo-list">
