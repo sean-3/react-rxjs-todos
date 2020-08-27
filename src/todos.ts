@@ -1,4 +1,4 @@
-import { Subject, Observable, merge, partition } from "rxjs"
+import { Subject, Observable, merge, partition, GroupedObservable } from "rxjs"
 import {
   pluck,
   mergeMap,
@@ -8,13 +8,11 @@ import {
   withLatestFrom,
   takeWhile,
   take,
-  tap,
   switchMap,
   share,
 } from "rxjs/operators"
-import { mergeWithKey } from "@react-rxjs/utils"
+import { collect, mergeWithKey, split, selfDependant } from "@react-rxjs/utils"
 import { bind } from "@react-rxjs/core"
-import { collect, split } from "./groupInStreamMap"
 
 const userAdd$ = new Subject<string>()
 export const onNewTodo = (text: string) => text && userAdd$.next(text)
@@ -41,14 +39,19 @@ export enum Filters {
   active = "active",
   done = "done",
 }
+type Todo = { id: number; text: string; done: boolean }
 
 const filterChanged$ = new Subject<Filters>()
 export const onFilterChange = (type: Filters) => filterChanged$.next(type)
 
 const [edit$, emptyEdit$] = partition(userEdit$, ({ text }) => text.length > 0)
 
-const _doneTodos$ = new Subject<Map<number, any>>()
-const _activeTodos$ = new Subject<Map<number, any>>()
+const [_doneTodos$, connectDoneTodos] = selfDependant<
+  Map<number, GroupedObservable<number, Todo>>
+>()
+const [_activeTodos$, connectActiveTodos] = selfDependant<
+  Map<number, GroupedObservable<number, Todo>>
+>()
 
 const deletions$: Observable<number> = merge(
   userDelete$,
@@ -100,12 +103,9 @@ const splitTodos$ = mergeWithKey({
 const allTodos$ = splitTodos$.pipe(collect())
 const activeTodos$ = splitTodos$.pipe(
   collect(map(({ done }) => !done)),
-  tap(_activeTodos$ as any),
+  connectActiveTodos(),
 )
-const doneTodos$ = splitTodos$.pipe(
-  collect(pluck("done")),
-  tap(_doneTodos$ as any),
-)
+const doneTodos$ = splitTodos$.pipe(collect(pluck("done")), connectDoneTodos())
 
 const todosByFilter = {
   [Filters.all]: allTodos$,
@@ -121,7 +121,12 @@ const [, currentTodos$] = bind(
   currentFilter$.pipe(switchMap((current) => todosByFilter[current])),
 )
 
-export const [useIds] = bind(currentTodos$.pipe(map((x) => [...x.keys()])))
+export const [useIds] = bind(
+  currentTodos$.pipe(
+    withLatestFrom(allTodos$),
+    map(([current, all]) => [...all.keys()].filter((key) => current.has(key))),
+  ),
+)
 export const [useTodo] = bind((id: number) =>
   currentTodos$.pipe(
     take(1),
