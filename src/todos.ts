@@ -14,6 +14,13 @@ import {
 import { collect, mergeWithKey, split, selfDependant } from "@react-rxjs/utils"
 import { bind } from "@react-rxjs/core"
 
+export enum Filters {
+  all = "all",
+  active = "active",
+  done = "done",
+}
+type Todo = { id: number; text: string; done: boolean }
+
 const userAdd$ = new Subject<string>()
 export const onNewTodo = (text: string) => text && userAdd$.next(text)
 
@@ -33,13 +40,6 @@ export const onDeleteTodo = (id: number) => () => userDelete$.next(id)
 
 const clearCompleted$ = new Subject()
 export const onClearCompleted = () => clearCompleted$.next()
-
-export enum Filters {
-  all = "all",
-  active = "active",
-  done = "done",
-}
-type Todo = { id: number; text: string; done: boolean }
 
 const filterChanged$ = new Subject<Filters>()
 export const onFilterChange = (type: Filters) => filterChanged$.next(type)
